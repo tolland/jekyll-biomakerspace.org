@@ -1,0 +1,696 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8" />
+  <title>
+  </title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    body {
+      overflow: hidden;
+      margin: 0;
+      padding: 0px;
+    }
+  </style>
+
+</head>
+
+<body>
+  <!-- comment these out if they are not being used for speed -->
+  <script src="https://threejs.org/examples/js/Detector.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/89/three.min.js"></script>
+  <script src="https://cdn.rawgit.com/mrdoob/stats.js/r17/build/stats.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.6.5/dat.gui.min.js"></script>
+
+  <!-- these are the standard controls offered in the examples -->
+  <!--  https://github.com/mrdoob/three.js/tree/r89/examples/js/controls  -->
+  <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+  <!-- <script src="three.js/examples/js/controls/FlyControls.js"></script>
+  <script src="three.js/examples/js/controls/DragControls.js"></script>
+  <script src="three.js/examples/js/controls/TransformControls.js"></script>
+  <script src="three.js/examples/js/controls/FirstPersonControls.js"></script>
+  <script src="three.js/examples/js/controls/PointerLockControls.js"></script>
+  <script src="three.js/examples/js/controls/TrackballControls.js"></script> -->
+
+  <!-- this controls mode likely conflicts with several others above -->
+  <!-- <script src="three.js/examples/js/controls/MarqueeControls.js"></script> -->
+
+  <!-- <script src="THREE.Terrain/build/THREE.Terrain.js"></script>
+  <script src="three.js/examples/js/libs/ammo.js"></script>
+  <script src="three.js/examples/js/objects/Sky.js"></script> -->
+
+
+
+  <div id="container" style="display:inline; float:left; width:450px; height: 400px;"></div>
+  <!--   <div id="gui" style="display:inline; float:left;"></div> -->
+
+  <script>
+    console.clear();
+    /**
+
+  This file depends on importing the boilerplate_template
+  along with all the other deps
+  
+*/
+
+    //     ____             __ _
+    //    / ___|___  _ __  / _(_) __ _ _   _ _ __ ___
+    //   | |   / _ \| '_ \| |_| |/ _` | | | | '__/ _ \
+    //   | |__| (_) | | | |  _| | (_| | |_| | | |  __/
+    //    \____\___/|_| |_|_| |_|\__, |\__,_|_|  \___|
+    //                           |___/
+
+
+    var _options = {
+      debug: {
+        verbose: true,
+      },
+      controls: {
+        orbit: false
+      },
+
+      camera_main: false,
+      camera_fps: false,
+
+      gui_stats: false
+    }
+  </script>
+
+  <!-- load this after the user configuration, so can be merged in -->
+  <script src="boilerplate_template.js"></script>
+
+  <script>
+    var twod = getUrlParameter('2d') ? true : false;
+
+
+    var camera = new THREE.OrthographicCamera(width / -2, width / 2, height / 2, height / -2, 1, 1000);
+
+
+    var midpoint = v(0, 500, 0);
+    // camera.fov = 75;
+    camera.position.y = 400;
+    camera.position.x = -400;
+    camera.lookAt(midpoint);
+    camera.updateProjectionMatrix();
+    scene.add(camera);
+
+
+    //camera.updat
+    var helper = new THREE.CameraHelper(camera);
+    scene.add(helper);
+    helper.update();
+    helper.visible = true;
+
+
+    controls = new THREE.OrbitControls(camera, renderer.domElement);
+    controls.target = midpoint;
+    if (controls)
+      controls.addEventListener('change', render);
+
+    controls.update();
+
+
+    //ref to the root branch
+    var treeObj;
+
+    var interpolant;
+
+    // var plane = makeBasicPlane();
+    // scene.add(plane);
+
+
+    var material = new THREE.MeshBasicMaterial({
+      color: 0x010101,
+      // wireframe: true,
+      // transparent: true,
+      // opacity: 0.5
+    });
+
+
+    var DEBUG_maketree = false;
+
+    var mindia;
+    var maxdia;
+
+    var geometry = new THREE.CylinderGeometry(0.5, 0.5,
+      1, 32);
+
+    var highestPoint = 0;
+
+    var tree_controls = {
+      depth: 8,
+      branch_length: 100,
+      branch_angle: Math.PI / 9,
+
+      branch_diameter: 5,
+      branch_diameter_min: 0.5,
+      branch_diameter_max: 5,
+
+      presets: 'Weed',
+
+      length_right_branch: 0.39,
+      length_central_branch: 0.89,
+      length_left_branch: 0.37,
+      length_root_branch: 1,
+
+      angle_right_branch: 18.34,
+      angle_central_branch: 3,
+      angle_left_branch: -16,
+      angle_root_branch: 0,
+
+      noise_angle_y: 0,
+      noise_angle: 0,
+      noise_length: 0,
+
+      thickness_scale: 1,
+      debug: false,
+
+
+      /**
+       * options as to whether to recalculate noise values
+       * not required for basic update, 
+       * except for new and updates on noise params
+       */
+      Regenerate: function (anglenoise = false,
+        lengthnoise = false,
+        angleYnoise = false) {
+
+        // this is used to get a value at a point in a linear function
+        interpolant = new THREE.LinearInterpolant(
+          new Float32Array([0, tree_controls.depth - 1]),
+          new Float32Array([Math.log(tree_controls.branch_diameter_max),
+            Math.log(tree_controls.branch_diameter_min)
+          ]),
+          1,
+          new Float32Array(1)
+        );
+
+
+        // are we regenerating??
+        if (treeObj) {
+
+          makeBranch(treeObj,
+            0,
+            'root',
+            tree_controls.branch_length,
+            anglenoise,
+            lengthnoise,
+            angleYnoise);
+
+
+          // new tree group, this takes a while. can it be faster?
+        } else {
+
+
+
+          //console.log(interpolant);
+
+          treeObj = makeBranch(null,
+            0,
+            'root',
+            tree_controls.branch_length, //spherical.length
+            anglenoise,
+            lengthnoise,
+            angleYnoise
+          );
+          //treeObj.name = 'treeObj';
+
+
+          scene.add(treeObj);
+
+        }
+
+        bbox = new THREE.Box3().setFromObject(treeObj);
+
+        var w = bbox.max.z - bbox.min.z;
+        var h = bbox.max.y - bbox.min.y;
+        var divaspect = width / height;
+        var myaspect = w / h;
+
+        // console.log(divaspect);
+        // console.log(myaspect);
+        // console.log(w);
+        // console.log(h);
+        // console.log(width / height);
+
+        midpoint = new THREE.Vector3().addVectors(bbox.min, bbox.max).divideScalar(2);
+
+        // console.log(midpoint);
+
+        var leftextent = -bbox.max.z + midpoint.z - 50;
+        var rightextend = -bbox.min.z + midpoint.z + 50;
+        var extentbottom = -midpoint.y;
+
+        if (myaspect < divaspect) {
+          extenttop = h / 2;
+          extentbottom = -h / 2;
+          // expand widths to match div aspect
+          leftextent = (-w / 2) / myaspect
+          rightextend = (w / 2) / myaspect;
+        } else {
+          leftextent = -w / 2
+          rightextend = w / 2;
+          //expand height to match
+          extenttop = (h / 2) * myaspect;
+          extentbottom = (-h / 2) * myaspect;
+        }
+
+        //bbox.max.y - midpoint.y + 100;
+
+        // console.log(`bbox: ${bbox.position}`);
+        // console.log(bbox);
+
+        camera.position.y = midpoint.y;
+        camera.position.x = 400;
+
+        camera.left = leftextent;
+        camera.right = rightextend;
+        camera.top = extenttop
+        camera.bottom = extentbottom;
+
+        controls.target = midpoint;
+        camera.lookAt(midpoint);
+        camera.updateProjectionMatrix();
+        helper.visible = false;
+        helper.update();
+
+        //var	thickness = d3.scaleLinear().range([Math.log(lw_max.value),Math.log(lw_min)]).domain([0,N]);
+
+        render();
+        //setTimeout(render, 2000);
+
+      }
+    }
+    var bbox;
+    var midpoint;
+    /**
+     * 
+     * @argument {branch} Object3D
+     */
+    function makeBranch(
+      branch, /* null if creating a new branch, otherwise the update branch */
+      depth, /* track the depth for updating based on linear interpolation */
+      ref, /* this is to track the branch child ref, ie left, central, right */
+      length, /* this is the length of the parent */
+      update_anglenoise, /* whether to recaluate the noise for the joint */
+      update_lengthnoise, /* whether to recaluate the noise for the length */
+      update_angleYnoise /* whether to recaluate the noise for Y rotation */
+    ) {
+
+      //length = length * ((2 / 3) ** depth);
+      //   if (DEBUG_maketree)
+      //mindia = (tree_controls.branch_diameter - 1) * ((2 / 3) ** depth);
+      //maxdia = (tree_controls.branch_diameter + 1) * ((2 / 3) ** depth);
+      mindia = Math.exp(interpolant.evaluate(depth + 1)[0]);
+      maxdia = Math.exp(interpolant.evaluate(depth)[0]);
+      if (tree_controls.debug)
+        console.log(`depth: ${depth} maxdia: ${maxdia} min dia: ${mindia} `);
+
+      if (tree_controls.debug && branch)
+        console.log("branch exists, updating");
+
+      if (tree_controls.debug)
+        console.log(`length: ${length} depth: ${depth} mindia:${_round(mindia)} maxdia: ${_round(maxdia)}`);
+
+      // create the branch from new if passed branch is null
+      if (!branch) {
+        branch = new THREE.Object3D();
+        branch.lengthmod = 1;
+        branch.anglemod = 1;
+        branch.angleYmod = 1;
+      }
+
+      if (ref != 'root')
+        branch.position.y = length;
+
+
+
+
+      // calculate a noise factor for angle, if noise angle is not 1
+      if (update_anglenoise) {
+        //console.log("updating anglenoise");
+        if (tree_controls.noise_angle)
+          branch.anglemod = 1 + ((2 * (Math.random() - 0.5)) * tree_controls.noise_angle);
+        else
+          branch.anglemod = 1;
+      }
+
+
+      // calculate a noise factor for angle, if noise angle is not 1
+      if (!twod && update_angleYnoise) {
+        //console.log("updating anglenoise");
+        if (tree_controls.noise_angle_y)
+          branch.angleYmod = 1 + ((2 * (Math.random() - 0.5)) * tree_controls.noise_angle_y);
+        else
+          branch.angleYmod = 1;
+      }
+
+      branch.rotation.y = 0;
+      branch.rotation.x = 0;
+      branch.rotation.z = 0;
+      if (!twod)
+        branch.rotateY(((2 * (Math.random() - 0.5)) * Math.PI) * tree_controls.noise_angle_y);
+      branch.rotateX(tree_controls['angle_' + ref + '_branch'] * (Math.PI / 180) * branch.anglemod);
+
+      // generate the cylinder if required, otherwise get it from children
+      var cylinder;
+      if (branch.children.length === 0) {
+        cylinder = new THREE.Mesh(geometry, material);
+        branch.add(cylinder);
+      } else {
+        cylinder = branch.children[0];
+      }
+
+
+      // calculate/update a noise factor for length if required (per branch)
+      if (update_lengthnoise) {
+        // console.log("updating update_lengthnoise");
+        // console.log(ref);
+        if ((ref != 'root') && tree_controls.noise_length)
+          branch.lengthmod = 1 + ((2 * (Math.random() - 0.5)) * tree_controls.noise_length);
+        else
+          branch.lengthmod = 1;
+      }
+
+      // update the length passed with the noise and local mod
+      length = tree_controls['length_' + ref + '_branch'] *
+        length *
+        branch.lengthmod;
+
+      // if (tree_controls.debug)
+      //   console.log(`scaling y to ${cylinder.scale.y} position to ${cylinder.position.y }`);
+
+      cylinder.name = 'cylinder_' + depth + '_' + ref;
+
+      // switch (ref) {
+      //   case 'left':
+      //     index = 1;
+      //     break;
+      //   case 'central':
+      //     index = 2;
+      //     break;
+      //   case 'right':
+      //     index = 3;
+      //     break;
+
+      //   default:
+      //     break;
+      // }
+
+      cylinder.scale.y = length;
+      cylinder.scale.x = maxdia;
+      cylinder.scale.z = maxdia;
+
+      // offset due to 0,0 being midpoint
+      cylinder.position.y = length / 2;
+
+
+      var newdepth = depth + 1;
+      var newbranch;
+
+      if (newdepth < tree_controls.depth) {
+
+        //var R1 = r1.value*(1+eta.value*node.sigma1r);
+        // do left branch
+
+        ['left', 'central', 'right'].forEach(element => {
+
+          if (tree_controls.debug)
+            console.group("creating " + element);
+
+          var index;
+          if (branch.children.length > 1) {
+            switch (element) {
+              case 'left':
+                index = 1;
+                break;
+              case 'central':
+                index = 2;
+                break;
+              case 'right':
+                index = 3;
+                break;
+
+              default:
+                break;
+            }
+          }
+          newbranch = false;
+
+
+
+          // first child is the cylinder, so check it has branch children
+          if (branch.children[index]) {
+
+            newbranch = makeBranch(branch.children[index], newdepth, element,
+              length,
+              update_anglenoise,
+              update_lengthnoise,
+              update_angleYnoise
+            );
+          } else {
+            newbranch = makeBranch(null, newdepth, element,
+              length,
+              update_anglenoise,
+              update_lengthnoise,
+              update_angleYnoise
+            );
+            branch.add(newbranch);
+          }
+
+
+          if (newbranch) {
+
+
+          }
+
+
+          if (tree_controls.debug)
+            console.groupEnd();
+        });
+
+      } else {
+        //we are at the bottom of the stack, remove any previous children
+        if (branch.children.length > 1) {
+          console.log(`removing children: ${branch.children.length-1}`);
+          console.log(branch.children.length);
+          for (let index = branch.children.length - 1; index > 0; index--) {
+            const element = branch.children[index];
+            branch.remove(element);
+          }
+        }
+
+      }
+
+
+      branch.name = 'branchGroup_' + depth + '_' + ref;
+
+
+
+      return branch;
+
+    }
+
+
+
+
+
+    var tree_gui = gui.addFolder('Weeds & Trees');
+    tree_gui.open();
+    //   var presets_gui = tree_gui.addFolder('Presets');
+    presets_gui = tree_gui;
+    presets_gui.open();
+    presets_gui.add(tree_controls, 'presets', ["Weed", "Tree", "Phragmites", "Tim Burton Tree", "Fir"]).name('Presets')
+      .onChange(function (val) {
+
+        /*
+        name:"Systems", choices: ["Weed","Tree","Phragmites","Tim Burton Tree","Fir"], value:0}
+
+        {r1:0.37,r2:0.89,r3:0.39,theta1:-16,theta2:3,theta3:18.34,sigma:0,eta:0,lw_max:lw_min},
+        {r1:0.72,r2:0.82,r3:0.69,theta1:-26.25,theta2:-0.83,theta3:33.75,sigma:0.77,eta:0.10,lw_max:12.66},
+        		{r1:0.4,r2:0.73,r3:0.32,theta1:-23,theta2:4,theta3:43,sigma:0.77,eta:0.13,lw_max:0.5},
+        		{r1:0.73,r2:0.15,r3:0.8,theta1:-20,theta2:0,theta3:33,sigma:0.42,eta:0.5,lw_max:9},
+            {r1:0.51,r2:0.9,r3:0.46,theta1:-29.1,theta2:-0.60,theta3:34,sigma:0.42,eta:0.0,lw_max:16}
+            */
+        switch (val) {
+          case "Weed":
+
+            tree_controls.length_left_branch = 0.37
+            tree_controls.length_central_branch = 0.89
+            tree_controls.length_right_branch = 0.39
+
+            tree_controls.angle_left_branch = -16
+            tree_controls.angle_central_branch = 3
+            tree_controls.angle_right_branch = 18.34
+
+            tree_controls.noise_angle = 0
+            tree_controls.noise_angle_y = 0.05
+            tree_controls.noise_length = 0
+
+            tree_controls.branch_diameter_min = 0.75
+            tree_controls.branch_diameter_max = 0.75
+
+            break;
+          case "Tree":
+
+            tree_controls.length_left_branch = 0.72
+            tree_controls.length_central_branch = 0.82
+            tree_controls.length_right_branch = 0.69
+
+            tree_controls.angle_left_branch = -26.25
+            tree_controls.angle_central_branch = -0.83
+            tree_controls.angle_right_branch = 33.75
+
+            tree_controls.noise_angle = 0.77
+            tree_controls.noise_angle_y = 0.04
+            tree_controls.noise_length = 0.10
+
+            tree_controls.branch_diameter_min = 0.5
+            tree_controls.branch_diameter_max = 12.66
+
+            break;
+          case "Phragmites":
+            //   		{r1:0.4,r2:0.73,r3:0.32,theta1:-23,theta2:4,theta3:43,sigma:0.77,eta:0.13,lw_max:0.5},
+            tree_controls.length_left_branch = 0.4
+            tree_controls.length_central_branch = 0.73
+            tree_controls.length_right_branch = 0.32
+
+            tree_controls.angle_left_branch = -23
+            tree_controls.angle_central_branch = 4
+            tree_controls.angle_right_branch = 43
+
+            tree_controls.noise_angle = 0.77
+            tree_controls.noise_length = 0.13
+
+            tree_controls.branch_diameter_min = 0.5
+            tree_controls.branch_diameter_max = 0.5
+
+
+            break;
+
+            //{r1:0.73,r2:0.15,r3:0.8,theta1:-20,theta2:0,theta3:33,sigma:0.42,eta:0.5,lw_max:9},
+          case "Tim Burton Tree":
+
+            tree_controls.length_left_branch = 0.73
+            tree_controls.length_central_branch = 0.15
+            tree_controls.length_right_branch = 0.8
+
+            tree_controls.angle_left_branch = -20
+            tree_controls.angle_central_branch = 0
+            tree_controls.angle_right_branch = 33
+
+            tree_controls.noise_angle = 0.42
+            tree_controls.noise_angle_y = 0.3
+            tree_controls.noise_length = 0.5
+
+            tree_controls.branch_diameter_min = 0.5
+            tree_controls.branch_diameter_max = 9
+
+            break;
+          case "Fir":
+
+            tree_controls.length_left_branch = 0.51
+            tree_controls.length_central_branch = 0.9
+            tree_controls.length_right_branch = 0.46
+
+            tree_controls.angle_left_branch = -29.1
+            tree_controls.angle_central_branch = -0.60
+            tree_controls.angle_right_branch = 34
+
+            tree_controls.noise_angle = 0.42
+            tree_controls.noise_length = 0.0
+
+            tree_controls.branch_diameter_min = 0.5
+            tree_controls.branch_diameter_max = 16
+
+            break;
+
+          default:
+            break;
+        }
+        tree_controls.Regenerate(true, true, true);
+      });
+    tree_gui.add(tree_controls, 'depth', 1, 8).step(1).name('iterations').onFinishChange(() => {
+      //scene.remove(treeGroup);
+      //treeGroup = null;
+      tree_controls.Regenerate(false, false, false);
+
+    }).listen();
+
+    //var lengui = tree_gui.addFolder('Length');
+    lengui = tree_gui;
+    lengui.open();
+    lengui.add(tree_controls, 'length_right_branch', 0.01, 0.95).step(0.01).name('length: right branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+    lengui.add(tree_controls, 'length_central_branch', 0.01, 0.95).step(0.01).name('length: central branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+    lengui.add(tree_controls, 'length_left_branch', 0.01, 0.95).step(0.01).name('length: left branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+
+    // var angle_gui = tree_gui.addFolder('Angle');
+    angle_gui = tree_gui;
+    angle_gui.open();
+    angle_gui.add(tree_controls, 'angle_right_branch', 0, 50).step(1).name('angle: right branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+    angle_gui.add(tree_controls, 'angle_central_branch', -20, 20).step(1).name('angle: central branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+    angle_gui.add(tree_controls, 'angle_left_branch', -50, 0).step(1).name('angle: left branch').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+
+    //var noisegui = tree_gui.addFolder('Noise');
+    noisegui = tree_gui;
+    noisegui.open();
+
+    noisegui.add(tree_controls, 'noise_angle', 0, 0.95).step(0.1).name('noise: angle').onChange(() => {
+        tree_controls.Regenerate(true, false, false);
+      })
+      .listen();
+
+    if (!twod) {
+      noisegui.add(tree_controls, 'noise_angle_y', 0, 0.95).step(0.1).name('noise: angleY').onChange(() => {
+          tree_controls.Regenerate(false, false, true);
+        })
+        .listen();
+    }
+
+    noisegui.add(tree_controls, 'noise_length', 0, 0.95).step(0.1).name('noise: length').onChange(() => {
+        tree_controls.Regenerate(false, true, false);
+      })
+      .listen();
+
+    //var thickness_gui = tree_gui.addFolder('Thickness');
+    thickness_gui = noisegui
+    thickness_gui.open();
+
+    thickness_gui.add(tree_controls, 'branch_diameter_min', 0.5, 16).step(0.5).name('thickness min').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+
+    thickness_gui.add(tree_controls, 'branch_diameter_max', 0.5, 16).step(1).name('thickness max').onChange(() => {
+      tree_controls.Regenerate(false, false, false);
+    }).listen();
+
+
+
+
+    // var debug_gui = tree_gui.addFolder('Debug');
+    // //debug_gui.open();
+    // debug_gui.add(tree_controls, 'debug').name('Debug Log')
+
+    tree_controls.Regenerate(true, true, true);
+
+
+
+    //   init();
+  </script>
+</body>
+
+</html>
