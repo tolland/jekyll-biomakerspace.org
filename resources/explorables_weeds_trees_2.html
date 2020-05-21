@@ -26,7 +26,10 @@
 
   <!-- these are the standard controls offered in the examples -->
   <!--  https://github.com/mrdoob/three.js/tree/r89/examples/js/controls  -->
-  <script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script>
+  <!-- script src="https://threejs.org/examples/js/controls/OrbitControls.js"></script -->
+  <script src="https://cdn.jsdelivr.net/npm/three@0.89.0/examples/js/controls/OrbitControls.js"></script>
+
+
   <!-- <script src="three.js/examples/js/controls/FlyControls.js"></script>
   <script src="three.js/examples/js/controls/DragControls.js"></script>
   <script src="three.js/examples/js/controls/TransformControls.js"></script>
@@ -52,7 +55,7 @@
 
   This file depends on importing the boilerplate_template
   along with all the other deps
-  
+
 */
 
     //     ____             __ _
@@ -170,7 +173,7 @@
 
       /**
        * options as to whether to recalculate noise values
-       * not required for basic update, 
+       * not required for basic update,
        * except for new and updates on noise params
        */
       Regenerate: function (anglenoise = false,
@@ -286,7 +289,7 @@
     var bbox;
     var midpoint;
     /**
-     * 
+     *
      * @argument {branch} Object3D
      */
     function makeBranch(

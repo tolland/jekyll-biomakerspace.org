@@ -1,0 +1,16 @@
+
+
+.inset_bg{
+	fill:white;
+	stroke:none;
+	stroke-width:0.5px;
+}
+
+
+.stamm,.branch {
+  stroke: #000;
+  stroke-opacity:1;
+  stroke-width: 2px;
+    stroke-linecap: round;
+}
+
